@@ -1,0 +1,7 @@
+{
+  "name": "anima-orbis",
+  "private": true,
+  "scripts": {
+    "build": "python3 scripts/build.py"
+  }
+}
