@@ -4,6 +4,7 @@ dist/
 _site/
 _build/
 node_modules/
+__pycache__/
 
 # Local deployment credentials
 .wrangler/
