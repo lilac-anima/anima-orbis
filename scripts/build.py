@@ -83,13 +83,13 @@ def markdown_to_html(source: str, notes: dict[str, str]) -> str:
         elif in_html_block:
             html_block.append(raw)
             if "</iframe>" in raw:
-                lines.append("\\n".join(html_block))
+                lines.append("\n".join(html_block))
                 html_block = []
                 in_html_block = False
         else:
             lines.append(raw)
     if html_block:
-        lines.append("\\n".join(html_block))
+        lines.append("\n".join(html_block))
     out: list[str] = []
     paragraph: list[str] = []
     in_list = False
