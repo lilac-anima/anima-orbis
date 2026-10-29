@@ -1,0 +1,12 @@
+.obsidian/
+dist/
+.DS_Store
+_site/
+_build/
+node_modules/
+
+# Local deployment credentials
+.wrangler/
+.env
+.env.*
+!.env.example

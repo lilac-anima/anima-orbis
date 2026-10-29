@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prop Manipulation — Baton Reel</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #111316; color: #e9ecef; font: 15px/1.4 system-ui, sans-serif;
+  }
+  main { width: min(92vw, 760px); }
+  header { display:flex; justify-content:space-between; align-items:baseline; gap:16px; margin-bottom:14px; }
+  h1 { font-size: 18px; font-weight: 600; letter-spacing:.02em; margin:0; }
+  .label { color:#8e98a3; font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+  .stage { position:relative; aspect-ratio: 16/10; border:1px solid #30353b; border-radius:14px; overflow:hidden; background:#191c20; box-shadow:0 18px 50px #0005; }
+  canvas { display:block; width:100%; height:100%; }
+  .readout { position:absolute; left:16px; top:14px; color:#8e98a3; font-size:12px; user-select:none; }
+  .readout b { color:#e9ecef; font-weight:500; }
+  .controls { display:flex; align-items:center; gap:16px; margin-top:14px; color:#9da6af; }
+  button { border:1px solid #3c444d; color:#edf0f2; background:#242930; border-radius:7px; padding:7px 12px; cursor:pointer; }
+  button:hover { background:#303740; }
+  label { display:flex; align-items:center; gap:8px; }
+  input[type=range] { accent-color:#e8b66a; width:150px; }
+  .hint { margin-top:12px; color:#727c86; font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Baton / Reel</h1><span class="label">Wall plane · front view</span></header>
+  <section class="stage">
+    <canvas id="view" aria-label="Animated baton reel demonstration"></canvas>
+    <div class="readout">direction: <b>clockwise</b> · axis: <b>midpoint</b></div>
+  </section>
+  <div class="controls">
+    <button id="toggle">Pause</button>
+    <button id="reset">Reset</button>
+    <label>speed <input id="speed" type="range" min="0.25" max="2" step="0.05" value="1"><span id="speedValue">1×</span></label>
+  </div>
+  <div class="hint">The baton rotates around its midpoint; the center marker shows the stationary axis.</div>
+</main>
+<script>
+const canvas = document.querySelector('#view');
+const ctx = canvas.getContext('2d');
+const toggle = document.querySelector('#toggle');
+const reset = document.querySelector('#reset');
+const speed = document.querySelector('#speed');
+const speedValue = document.querySelector('#speedValue');
+let angle = 0, last = performance.now(), playing = true, speedFactor = 1;
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const r = canvas.getBoundingClientRect();
+  canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener('resize', resize); resize();
+
+function draw(now) {
+  const dt = Math.min(40, now - last); last = now;
+  if (playing) angle = (angle + dt * 0.00235 * speedFactor) % (Math.PI * 2);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  const cx = w / 2, cy = h / 2, length = Math.min(w, h) * .58, half = length / 2;
+  ctx.clearRect(0, 0, w, h);
+
+  // Subtle wall-plane guides.
+  ctx.strokeStyle = '#2a2f35'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, 28); ctx.lineTo(cx, h - 28); ctx.moveTo(28, cy); ctx.lineTo(w - 28, cy); ctx.stroke();
+  ctx.strokeStyle = '#343a41'; ctx.setLineDash([3, 7]);
+  ctx.beginPath(); ctx.arc(cx, cy, half, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+
+  const dx = Math.cos(angle) * half, dy = Math.sin(angle) * half;
+  // Motion trace points show the circular path of both ends.
+  for (const sign of [-1, 1]) {
+    ctx.strokeStyle = sign === 1 ? '#e8b66a28' : '#8dc7c428'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, half, sign === 1 ? 0 : Math.PI, sign === 1 ? angle : Math.PI + angle, false); ctx.stroke();
+  }
+
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle);
+  // Baton shadow and body.
+  ctx.lineCap = 'round'; ctx.lineWidth = 18; ctx.strokeStyle = '#0008'; ctx.beginPath(); ctx.moveTo(-half + 2, 4); ctx.lineTo(half + 2, 4); ctx.stroke();
+  const grad = ctx.createLinearGradient(-half, 0, half, 0); grad.addColorStop(0, '#8dc7c4'); grad.addColorStop(.5, '#f1d08b'); grad.addColorStop(1, '#e8b66a');
+  ctx.lineWidth = 13; ctx.strokeStyle = grad; ctx.beginPath(); ctx.moveTo(-half, 0); ctx.lineTo(half, 0); ctx.stroke();
+  ctx.lineWidth = 3; ctx.strokeStyle = '#fff8df99'; ctx.beginPath(); ctx.moveTo(-half + 7, -3); ctx.lineTo(half - 7, -3); ctx.stroke();
+  for (const x of [-half, half]) { ctx.fillStyle = '#f5f0df'; ctx.beginPath(); ctx.arc(x, 0, 8, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#69747d'; ctx.beginPath(); ctx.arc(x, 0, 3, 0, Math.PI*2); ctx.fill(); }
+  ctx.restore();
+
+  // Fixed midpoint axis and a tiny clockwise direction cue.
+  ctx.fillStyle = '#f4e6c4'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#f4e6c477'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, 23, -.7, .35); ctx.stroke();
+  const ax = cx + Math.cos(.35)*23, ay = cy + Math.sin(.35)*23;
+  ctx.fillStyle = '#f4e6c4'; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ax-7,ay-2); ctx.lineTo(ax-2,ay-7); ctx.closePath(); ctx.fill();
+  requestAnimationFrame(draw);
+}
+
+toggle.onclick = () => { playing = !playing; toggle.textContent = playing ? 'Pause' : 'Play'; };
+reset.onclick = () => { angle = 0; last = performance.now(); };
+speed.oninput = () => { speedFactor = Number(speed.value); speedValue.textContent = speedFactor.toFixed(2).replace(/0$/, '') + '×'; };
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

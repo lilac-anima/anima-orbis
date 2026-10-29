@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prop Manipulation — Horizontal Plane</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; background:#111316; color:#e9ecef; font:14px system-ui,sans-serif; display:grid; place-items:center; }
+  main { width:min(94vw,900px); }
+  header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; gap:20px; }
+  h1 { margin:0; font-size:18px; font-weight:600; }
+  .tag { color:#8e98a3; font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
+  .stage { position:relative; aspect-ratio:16/10; overflow:hidden; border:1px solid #30353b; border-radius:14px; background:#191c20; box-shadow:0 18px 50px #0005; }
+  canvas { display:block; width:100%; height:100%; }
+  .readout { position:absolute; top:14px; left:16px; color:#9da6af; font-size:12px; pointer-events:none; }
+  .readout b { color:#f0d39a; font-weight:500; }
+  .controls { display:flex; flex-direction:column; gap:9px; margin-top:13px; color:#9da6af; }
+  .top-controls, .axis-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; }
+  .axis-row { padding:7px 10px; border:1px solid #2d343b; border-radius:8px; background:#191c20; }
+  .axis-name { width:78px; color:#d8b4fe; font-weight:600; }
+  button, select, input[type=number] { border:1px solid #3c444d; border-radius:7px; background:#242930; color:#edf0f2; padding:7px 10px; }
+  button { cursor:pointer; } button:hover { background:#303740; }
+  label { display:flex; align-items:center; gap:7px; }
+  input[type=range] { width:130px; accent-color:#e8b66a; }
+  .note { margin-top:10px; color:#727c86; font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Baton / Horizontal Plane</h1><span class="tag">Three.js · 3D view</span></header>
+  <section class="stage">
+    <canvas id="scene" aria-label="Three-dimensional baton animation"></canvas>
+    <div class="readout">three rotational axes · independently adjustable</div>
+  </section>
+  <div class="controls">
+    <div class="top-controls">
+      <button id="toggle">Pause</button>
+      <button id="reset">Reset</button>
+      <label>speed <input id="speed" type="range" min=".25" max="2" value="1" step=".05"><span id="speedValue">1×</span></label>
+      <button id="trail">Hide trail</button>
+    </div>
+    <div class="axis-row"><span class="axis-name">Hand axis</span><label>turns <input id="propTurns" type="number" min="0" max="8" step=".25" value="1" style="width:58px"><span>/ cycle</span></label><label>direction <select id="handDirection"><option value="cw">Clockwise</option><option value="ccw">Counterclockwise</option></select></label><label>Plane <select id="handAxis"><option value="x">Wheel plane</option><option value="y" selected>Floor plane</option><option value="z">Wall plane</option></select></label></div>
+    <div class="axis-row"><span class="axis-name">Shoulder axis</span><label>turns <input id="midpointTurns" type="number" min="0" max="8" step=".25" value="1" style="width:58px"><span>/ cycle</span></label><label>direction <select id="shoulderDirection"><option value="cw">Clockwise</option><option value="ccw">Counterclockwise</option></select></label><label>Plane <select id="shoulderPlane"><option value="floor" selected>Floor plane (XZ)</option><option value="wall">Wall plane (XY)</option></select></label></div>
+    <div class="axis-row"><span class="axis-name">Dance axis</span><label>turns <input id="danceTurns" type="number" min="0" max="8" step=".25" value="1" style="width:58px"><span>/ cycle</span></label><label>direction <select id="danceDirection"><option value="cw">Clockwise</option><option value="ccw">Counterclockwise</option></select></label></div>
+  </div>
+  <div class="note">Set independent turns and directions for the hand, shoulder, and dance axes. Clockwise is measured from the positive normal of each selected plane. The shoulder-to-dance radius is one baton length. Drag to orbit the camera; scroll to zoom.</div>
+</main>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
+
+const canvas=document.querySelector('#scene');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setClearColor(0x191c20,1);
+renderer.shadowMap.enabled=true;
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(38,1,.1,100);
+let cameraRadius=10.5, cameraAzimuth=.8, cameraElevation=.85;
+function placeCamera(){ camera.position.set(cameraRadius*Math.cos(cameraAzimuth)*Math.cos(cameraElevation),cameraRadius*Math.sin(cameraElevation),cameraRadius*Math.sin(cameraAzimuth)*Math.cos(cameraElevation)); camera.lookAt(1,0,0); }
+placeCamera();
+
+scene.add(new THREE.HemisphereLight(0xd9e8ff,0x182026,2.2));
+const key=new THREE.DirectionalLight(0xffe2ad,3); key.position.set(3,7,5); key.castShadow=true; scene.add(key);
+const ground=new THREE.Mesh(new THREE.CircleGeometry(3.5,96),new THREE.MeshStandardMaterial({color:0x17345b,roughness:.92,metalness:0,transparent:true,opacity:.16,depthWrite:false}));
+ground.rotation.x=-Math.PI/2; ground.position.y=-.035; ground.receiveShadow=true; scene.add(ground);
+const grid=new THREE.GridHelper(7,14,0x3b82f6,0x214b83); grid.position.y=-.02; scene.add(grid);
+const axes=new THREE.AxesHelper(2.35); axes.position.y=.015; scene.add(axes);
+function axisLabel(text,color,position){
+  const canvas=document.createElement('canvas'); canvas.width=128; canvas.height=64;
+  const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,128,64); ctx.font='bold 34px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle=color; ctx.fillText(text,64,32);
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(canvas),transparent:true,depthTest:false})); sprite.position.set(...position); sprite.scale.set(.42,.21,1); scene.add(sprite);
+}
+axisLabel('X','#f0abfc',[2.65,.05,0]);
+axisLabel('Y','#d8b4fe',[0,2.65,0]);
+axisLabel('Z','#38bdf8',[0,.05,2.65]);
+const origin=new THREE.Mesh(new THREE.SphereGeometry(.09,20,12),new THREE.MeshStandardMaterial({color:0x38bdf8,emissive:0x123d5c,emissiveIntensity:1.5})); origin.position.set(0,.02,0); scene.add(origin);
+const originRing=new THREE.Mesh(new THREE.RingGeometry(.18,.19,48),new THREE.MeshBasicMaterial({color:0x38bdf8,transparent:true,opacity:.7,side:THREE.DoubleSide})); originRing.rotation.x=-Math.PI/2; originRing.position.y=.01; scene.add(originRing);
+
+const shoulderGroup=new THREE.Group(); scene.add(shoulderGroup);
+const shoulderAxis=new THREE.Mesh(new THREE.SphereGeometry(.085,20,12),new THREE.MeshStandardMaterial({color:0x818cf8,emissive:0x25275d,emissiveIntensity:1.2})); shoulderGroup.add(shoulderAxis);
+const shoulderLink=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(-2.9,0,0)]),new THREE.LineBasicMaterial({color:0xd946ef,transparent:true,opacity:.45})); shoulderGroup.add(shoulderLink);
+const batonPivot=new THREE.Group(); shoulderGroup.add(batonPivot);
+const batonSpin=new THREE.Group(); batonPivot.add(batonSpin);
+const batonFrame=new THREE.Group(); batonSpin.add(batonFrame);
+const baton=new THREE.Mesh(new THREE.CylinderGeometry(.075,.075,2.9,24),new THREE.MeshStandardMaterial({color:0x8b5cf6,roughness:.35,metalness:.2}));
+baton.rotation.z=Math.PI/2; baton.position.x=0; baton.castShadow=true; batonFrame.add(baton);
+// A contrasting longitudinal marker makes rotation around the baton’s own X axis visible.
+const handMarker=new THREE.Mesh(new THREE.BoxGeometry(2.55,.018,.018),new THREE.MeshStandardMaterial({color:0xf0abfc,roughness:.4,metalness:.1})); handMarker.position.y=.085; handMarker.castShadow=true; batonFrame.add(handMarker);
+const endA=new THREE.Mesh(new THREE.SphereGeometry(.115,20,12),new THREE.MeshStandardMaterial({color:0xd8b4fe,roughness:.3}));
+const endB=endA.clone(); endA.position.x=-1.45; endB.position.x=1.45; batonFrame.add(endA,endB);
+const midpoint=new THREE.Mesh(new THREE.SphereGeometry(.11,20,12),new THREE.MeshStandardMaterial({color:0xc084fc,emissive:0x3d1b5d,emissiveIntensity:1})); batonFrame.add(midpoint);
+
+const trailGroup=new THREE.Group(); scene.add(trailGroup);
+let trailVisible=true, playing=true, angle=0, last=performance.now(), speed=1;
+let propTurns=1, midpointTurns=1, danceTurns=1;
+let handDirection='cw', handAxis='y', shoulderDirection='cw', shoulderPlane='floor', danceDirection='cw';
+const trailLines=[];
+function makeTrail(color){ const geo=new THREE.BufferGeometry(); const mat=new THREE.LineBasicMaterial({color,transparent:true,opacity:.5}); const line=new THREE.Line(geo,mat); trailGroup.add(line); trailLines.push({line,points:[]}); return line; }
+const trailA=makeTrail(0xf0abfc), trailB=makeTrail(0xd8b4fe);
+function updateTrail(){
+  if(!trailVisible)return;
+  // Sample the actual endpoint objects so trails cannot drift from the baton.
+  const a=endA.getWorldPosition(new THREE.Vector3());
+  const b=endB.getWorldPosition(new THREE.Vector3());
+  for(const [obj,p] of [[trailA,a],[trailB,b]]){ const data=trailLines.find(x=>x.line===obj); data.points.push(p.clone()); if(data.points.length>180)data.points.shift(); data.line.geometry.setFromPoints(data.points); }
+}
+function clearTrail(){ for(const x of trailLines){x.points=[];x.line.geometry.setFromPoints([]);} }
+function applyPreset(next){
+  clearTrail();
+  const preset={inspin:[1,1],antispin:[1,1]}[next];
+  if(preset){
+    propTurns=preset[0]; midpointTurns=preset[1];
+    handDirection='cw'; handAxis='y'; shoulderDirection=next==='inspin'?'ccw':'cw'; shoulderPlane='floor'; danceDirection='cw';
+    document.querySelector('#propTurns').value=propTurns; document.querySelector('#midpointTurns').value=midpointTurns;
+    document.querySelector('#handDirection').value=handDirection; document.querySelector('#handAxis').value=handAxis; document.querySelector('#shoulderDirection').value=shoulderDirection; document.querySelector('#shoulderPlane').value=shoulderPlane; document.querySelector('#danceDirection').value=danceDirection;
+  }
+}
+function resize(){const r=canvas.getBoundingClientRect(); renderer.setSize(r.width,r.height,false); camera.aspect=r.width/r.height; camera.updateProjectionMatrix();}
+addEventListener('resize',resize); resize();
+
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);canvas._drag=[e.clientX,e.clientY];});
+canvas.addEventListener('pointermove',e=>{if(!canvas._drag)return; const dx=e.clientX-canvas._drag[0],dy=e.clientY-canvas._drag[1];canvas._drag=[e.clientX,e.clientY];cameraAzimuth-=dx*.008;cameraElevation=Math.max(.2,Math.min(1.45,cameraElevation+dy*.008));placeCamera();});
+canvas.addEventListener('pointerup',()=>canvas._drag=null);
+canvas.addEventListener('wheel',e=>{e.preventDefault();cameraRadius=Math.max(4.5,Math.min(12,cameraRadius+e.deltaY*.006));placeCamera();},{passive:false});
+
+document.querySelector('#toggle').onclick=()=>{playing=!playing;document.querySelector('#toggle').textContent=playing?'Pause':'Play';};
+document.querySelector('#reset').onclick=()=>{angle=0;clearTrail();};
+document.querySelector('#propTurns').oninput=e=>{propTurns=Math.max(0,Math.min(8,Number(e.target.value)||0));clearTrail();};
+document.querySelector('#midpointTurns').oninput=e=>{midpointTurns=Math.max(0,Math.min(8,Number(e.target.value)||0));clearTrail();};
+document.querySelector('#danceTurns').oninput=e=>{danceTurns=Math.max(0,Math.min(8,Number(e.target.value)||0));clearTrail();};
+document.querySelector('#handDirection').onchange=e=>{handDirection=e.target.value;clearTrail();};
+document.querySelector('#handAxis').onchange=e=>{handAxis=e.target.value;clearTrail();};
+document.querySelector('#shoulderDirection').onchange=e=>{shoulderDirection=e.target.value;clearTrail();};
+document.querySelector('#shoulderPlane').onchange=e=>{shoulderPlane=e.target.value;clearTrail();};
+document.querySelector('#danceDirection').onchange=e=>{danceDirection=e.target.value;clearTrail();};
+document.querySelector('#speed').oninput=e=>{speed=+e.target.value;document.querySelector('#speedValue').textContent=speed.toFixed(2).replace(/0$/,'')+'×';};
+document.querySelector('#trail').onclick=()=>{trailVisible=!trailVisible;trailGroup.visible=trailVisible;document.querySelector('#trail').textContent=trailVisible?'Hide trail':'Show trail';};
+const initialMode=new URLSearchParams(location.search).get('mode');
+if(['inspin','antispin'].includes(initialMode)){applyPreset(initialMode);}
+
+function tick(now){const dt=Math.min(40,now-last);last=now;if(playing)angle=(angle+dt*.001047*speed)%(Math.PI*2);
+  const s=angle;
+  // Clockwise is defined as negative right-hand-rule rotation when viewed
+  // from the positive normal of the selected plane.
+  const handPhase=s*propTurns*(handDirection==='cw'?-1:1);
+  const midpointPhase=s*midpointTurns*(shoulderDirection==='cw'?-1:1);
+  const dancePhase=s*danceTurns*(danceDirection==='cw'?-1:1);
+  shoulderGroup.position.set(2.9*Math.cos(dancePhase),0,2.9*Math.sin(dancePhase));
+  shoulderLink.rotation.y=dancePhase;
+  if(shoulderPlane==='wall') batonPivot.position.set(1.45*Math.cos(midpointPhase),1.45*Math.sin(midpointPhase),0);
+  else batonPivot.position.set(1.45*Math.cos(midpointPhase),0,1.45*Math.sin(midpointPhase));
+  batonFrame.rotation.y=handAxis==='x'?Math.PI/2:0;
+  batonSpin.rotation.set(0,0,0);
+  batonSpin.rotation[handAxis]=handPhase;
+  scene.updateMatrixWorld(true);
+  updateTrail(); renderer.render(scene,camera); requestAnimationFrame(tick);}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

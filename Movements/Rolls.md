@@ -1,0 +1,1 @@
+Once you have two [[Balance Points]] you can learn a transition between them.  This movement is called a roll. 
