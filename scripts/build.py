@@ -69,7 +69,27 @@ def inline(text: str, notes: dict[str, str]) -> str:
 
 
 def markdown_to_html(source: str, notes: dict[str, str]) -> str:
-    lines = source.replace("file:///Users/alexperusse/projects/Prop%20Manipulation/", "").splitlines()
+    # Convert local Obsidian file URLs to deployable root-relative URLs.
+    source = re.sub(r'file:///[^\"]*/Animations/', '/Animations/', source)
+    raw_lines = source.splitlines()
+    # Preserve multiline raw HTML blocks such as iframe embeds as one block.
+    lines: list[str] = []
+    html_block: list[str] = []
+    in_html_block = False
+    for raw in raw_lines:
+        if not in_html_block and raw.lstrip().startswith("<iframe"):
+            in_html_block = True
+            html_block = [raw]
+        elif in_html_block:
+            html_block.append(raw)
+            if "</iframe>" in raw:
+                lines.append("\\n".join(html_block))
+                html_block = []
+                in_html_block = False
+        else:
+            lines.append(raw)
+    if html_block:
+        lines.append("\\n".join(html_block))
     out: list[str] = []
     paragraph: list[str] = []
     in_list = False
